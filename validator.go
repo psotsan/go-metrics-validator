@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-type metric struct {
+type Metric struct {
 	Name      string
 	Value     float64
 	Unit      string
@@ -19,6 +19,24 @@ type metric struct {
 func splitAndValidate(l string, n int, s string) ([]string, bool) {
 	f := strings.Split(l, s)
 	return f, len(f) == n
+}
+
+func validateMetric(m Metric, t map[string]float64) error {
+	if _, ok := t[m.Name]; !ok {
+		return fmt.Errorf("Metric %s not found in thresholds file", m.Name)
+	}
+	return nil
+}
+
+func checkMetric(m Metric, t map[string]float64, upperThres bool) (exceedsThres bool, err error) {
+	if e := validateMetric(m, t); e != nil {
+		return false, e
+	}
+
+	if (upperThres && m.Value > t[m.Name]) || (!upperThres && m.Value < t[m.Name]) {
+		return true, nil
+	}
+	return false, nil
 }
 
 func readThresholds(fs string, s string) (map[string]float64, error) {
@@ -44,8 +62,12 @@ func readThresholds(fs string, s string) (map[string]float64, error) {
 			return nil, fmt.Errorf("Thresholds file: cannot convert %s to float64", fields[1])
 		}
 
-		// AÑADIR: Verificar si ya existe el umbral en el mapa antes de agregar
-		thres[strings.ToLower(fields[0])] = val
+		key := strings.ToLower(fields[0])
+		if prevVal, ok := thres[key]; ok {
+			e := fmt.Sprintf("WARN: overwriting previous %s threshold value: %.2f -> %.2f", key, prevVal, val)
+			fmt.Fprintln(os.Stderr, e)
+		}
+		thres[key] = val
 	}
 
 	if err := sc.Err(); err != nil {
@@ -55,8 +77,8 @@ func readThresholds(fs string, s string) (map[string]float64, error) {
 	return thres, nil
 }
 
-func readMetrics(fs string, s string) ([]metric, error) {
-	var metrics []metric
+func readMetrics(fs string, s string) ([]Metric, error) {
+	var metrics []Metric
 
 	f, err := os.Open(fs)
 	if err != nil {
@@ -76,7 +98,7 @@ func readMetrics(fs string, s string) ([]metric, error) {
 		}
 
 		mName := strings.ToLower(fields[0])
-		m := metric{Name: mName, Unit: fields[2]}
+		m := Metric{Name: mName, Unit: fields[2]}
 		if v, err := strconv.ParseFloat(fields[1], 64); err == nil {
 			m.Value = v
 		} else {
