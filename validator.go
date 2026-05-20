@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -16,9 +17,21 @@ type Metric struct {
 	Timestamp time.Time
 }
 
+type threshold struct {
+	value        float64
+	isUpperLimit bool
+}
+
 func splitAndValidate(l string, n int, s string) ([]string, bool) {
+	var ret []string
 	f := strings.Split(l, s)
-	return f, len(f) == n
+	for _, st := range f {
+		st = strings.Trim(st, " ")
+		if st != "" {
+			ret = append(ret, st)
+		}
+	}
+	return ret, len(ret) == n
 }
 
 func validateMetric(m Metric, t map[string]float64) error {
@@ -39,58 +52,59 @@ func checkMetric(m Metric, t map[string]float64, upperThres bool) (exceedsThres 
 	return false, nil
 }
 
-func readThresholds(fs string, s string) (map[string]float64, error) {
-	thres := make(map[string]float64)
+func readThresholds(r io.Reader, sep string) (thresholds map[string]threshold, err error) {
+	thresholds = make(map[string]threshold)
 
-	f, err := os.Open(fs)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	sc := bufio.NewScanner(f)
+	sc := bufio.NewScanner(r)
 	l := 0
 	for sc.Scan() {
 		l++
-		fields, ok := splitAndValidate(sc.Text(), 2, s)
+		line := sc.Text()
+
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		fields, ok := splitAndValidate(line, 3, sep)
 		if !ok {
 			return nil, fmt.Errorf("Thresholds file: format fault at line %d", l)
 		}
 
-		val, err := strconv.ParseFloat(fields[1], 64)
-		if err != nil {
-			return nil, fmt.Errorf("Thresholds file: cannot convert %s to float64", fields[1])
+		val, e := strconv.ParseFloat(fields[1], 64)
+		if e != nil {
+			return nil, fmt.Errorf("Thresholds file: format fault at line %d", l)
+		}
+
+		limitType := strings.ToLower(fields[2])
+		if limitType != "max" && limitType != "min" {
+			return nil, fmt.Errorf("Thresholds file: unrecognized type of limit at line %d", l)
 		}
 
 		key := strings.ToLower(fields[0])
-		if prevVal, ok := thres[key]; ok {
-			e := fmt.Sprintf("WARN: overwriting previous %s threshold value: %.2f -> %.2f", key, prevVal, val)
+		if prevThres, ok := thresholds[key]; ok {
+			e := fmt.Sprintf("WARN: overwriting previous %s threshold value: %.2f -> %.2f", key, prevThres.value, val)
 			fmt.Fprintln(os.Stderr, e)
 		}
-		thres[key] = val
+
+		isUpperLimit := limitType == "max"
+		thresholds[key] = threshold{value: val, isUpperLimit: isUpperLimit}
 	}
 
 	if err := sc.Err(); err != nil {
 		return nil, err
 	}
 
-	return thres, nil
+	return
 }
 
-func readMetrics(fs string, s string) ([]Metric, error) {
+func readMetrics(r io.Reader, sep string) ([]Metric, error) {
 	var metrics []Metric
 
-	f, err := os.Open(fs)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	sc := bufio.NewScanner(f)
+	sc := bufio.NewScanner(r)
 	l := 0
 	for sc.Scan() {
 		l++
-		fields, ok := splitAndValidate(sc.Text(), 4, s)
+		fields, ok := splitAndValidate(sc.Text(), 4, sep)
 		if !ok {
 			e := fmt.Sprintf("Metrics file: format fault at line %d", l)
 			fmt.Fprintln(os.Stderr, e)
@@ -116,7 +130,6 @@ func readMetrics(fs string, s string) ([]Metric, error) {
 		}
 
 		metrics = append(metrics, m)
-
 	}
 
 	if err := sc.Err(); err != nil {
@@ -124,4 +137,8 @@ func readMetrics(fs string, s string) ([]Metric, error) {
 	}
 
 	return metrics, nil
+}
+
+func evaluateMetrics(m []Metric, t map[string]float64) (warnings int) {
+	return warnings
 }

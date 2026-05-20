@@ -20,10 +20,18 @@ func main() {
 	}
 	defer metricsFile.Close()
 
-	thresholds, err := readThresholds(os.Args[2], separator)
+	tFileName := os.Args[2]
+	mFileName := os.Args[1]
+
+	fh, err := os.Open(tFileName)
+	if err != nil {
+		fmt.Errorf("Could not open file %s", tFileName)
+		os.Exit(1)
+	}
+
+	thresholds, err := readThresholds(fh, separator)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[-] %v\n", err)
-		os.Exit(1)
 	}
 	fmt.Println(thresholds)
 }
