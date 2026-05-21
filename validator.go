@@ -17,7 +17,7 @@ type Metric struct {
 	Timestamp time.Time
 }
 
-type threshold struct {
+type Threshold struct {
 	value        float64
 	isUpperLimit bool
 }
@@ -34,26 +34,8 @@ func splitAndValidate(l string, n int, s string) ([]string, bool) {
 	return ret, len(ret) == n
 }
 
-func validateMetric(m Metric, t map[string]float64) error {
-	if _, ok := t[m.Name]; !ok {
-		return fmt.Errorf("Metric %s not found in thresholds file", m.Name)
-	}
-	return nil
-}
-
-func checkMetric(m Metric, t map[string]float64, upperThres bool) (exceedsThres bool, err error) {
-	if e := validateMetric(m, t); e != nil {
-		return false, e
-	}
-
-	if (upperThres && m.Value > t[m.Name]) || (!upperThres && m.Value < t[m.Name]) {
-		return true, nil
-	}
-	return false, nil
-}
-
-func readThresholds(r io.Reader, sep string) (thresholds map[string]threshold, err error) {
-	thresholds = make(map[string]threshold)
+func readThresholds(r io.Reader, sep string) (thresholds map[string]Threshold, err error) {
+	thresholds = make(map[string]Threshold)
 
 	sc := bufio.NewScanner(r)
 	l := 0
@@ -72,7 +54,7 @@ func readThresholds(r io.Reader, sep string) (thresholds map[string]threshold, e
 
 		val, e := strconv.ParseFloat(fields[1], 64)
 		if e != nil {
-			return nil, fmt.Errorf("Thresholds file: format fault at line %d", l)
+			return nil, fmt.Errorf("Thresholds file: could not convert %s to float64 at line %d", fields[1], l)
 		}
 
 		limitType := strings.ToLower(fields[2])
@@ -87,13 +69,12 @@ func readThresholds(r io.Reader, sep string) (thresholds map[string]threshold, e
 		}
 
 		isUpperLimit := limitType == "max"
-		thresholds[key] = threshold{value: val, isUpperLimit: isUpperLimit}
+		thresholds[key] = Threshold{value: val, isUpperLimit: isUpperLimit}
 	}
 
 	if err := sc.Err(); err != nil {
 		return nil, err
 	}
-
 	return
 }
 
@@ -104,7 +85,13 @@ func readMetrics(r io.Reader, sep string) ([]Metric, error) {
 	l := 0
 	for sc.Scan() {
 		l++
-		fields, ok := splitAndValidate(sc.Text(), 4, sep)
+		line := sc.Text()
+
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		fields, ok := splitAndValidate(line, 4, sep)
 		if !ok {
 			e := fmt.Sprintf("Metrics file: format fault at line %d", l)
 			fmt.Fprintln(os.Stderr, e)
@@ -135,10 +122,24 @@ func readMetrics(r io.Reader, sep string) ([]Metric, error) {
 	if err := sc.Err(); err != nil {
 		return metrics, err
 	}
-
 	return metrics, nil
 }
 
-func evaluateMetrics(m []Metric, t map[string]float64) (warnings int) {
-	return warnings
+func evaluateMetrics(metrics []Metric, thresholds map[string]Threshold) (warnMetrics []Metric) {
+	warnMetrics = make([]Metric, 0)
+
+	for _, m := range metrics {
+		t := thresholds[m.Name]
+
+		if t.isUpperLimit && m.Value > t.value {
+			warnMetrics = append(warnMetrics, m)
+			continue
+		}
+
+		if !t.isUpperLimit && m.Value < t.value {
+			warnMetrics = append(warnMetrics, m)
+			continue
+		}
+	}
+	return warnMetrics
 }

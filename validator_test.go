@@ -1,7 +1,9 @@
 package main
 
 import (
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestSplitAndValidate(t *testing.T) {
@@ -102,8 +104,202 @@ func TestSplitAndValidate(t *testing.T) {
 				sameStr = false
 			}
 			if !sameStr {
-				t.Errorf("splitAndValidate( %q)\ngot string %v - want %v\ngot ok %t - want %t\n", tt.name, got, tt.wantStr, ok, tt.wantBool)
+				t.Fatalf("splitAndValidate(%q)\ngot string %v - want %v\ngot ok %t - want %t\n", tt.name, got, tt.wantStr, ok, tt.wantBool)
 			}
 		})
+	}
+}
+
+func TestReadThresholds(t *testing.T) {
+	rts := []struct {
+		name    string
+		input   string
+		want    map[string]Threshold
+		wantErr bool
+	}{
+		{
+			name:  "correct single line",
+			input: "cpu_usage,80,max",
+			want:  map[string]Threshold{"cpu_usage": {value: 80.0, isUpperLimit: true}},
+		},
+		{
+			name:  "correct multiple lines",
+			input: "cpu_usage,80,max\nmem_usage,90,max\ndisk_free,10,min",
+			want: map[string]Threshold{
+				"cpu_usage": {value: 80.0, isUpperLimit: true},
+				"mem_usage": {value: 90.0, isUpperLimit: true},
+				"disk_free": {value: 10.0, isUpperLimit: false},
+			},
+		},
+		{
+			name:  "spaced line",
+			input: " cpu_usage , 80 , max ",
+			want:  map[string]Threshold{"cpu_usage": {value: 80.0, isUpperLimit: true}},
+		},
+		{
+			name:  "empty line",
+			input: "",
+			want:  map[string]Threshold{},
+		},
+		{
+			name:  "commented line",
+			input: "# This is a comment",
+			want:  map[string]Threshold{},
+		},
+		{
+			name:  "commented line and valid line",
+			input: "# This is a comment\nmem_usage,85,max",
+			want:  map[string]Threshold{"mem_usage": {value: 85.0, isUpperLimit: true}},
+		},
+		{
+			name:  "uppercase line",
+			input: "CPU_USAGE,80,MAX",
+			want:  map[string]Threshold{"cpu_usage": {value: 80.0, isUpperLimit: true}},
+		},
+		{
+			name:  "overwritten metrics. Should show a warning",
+			input: "cpu_usage,80,max\ncpu_usage,85,max",
+			want:  map[string]Threshold{"cpu_usage": {value: 85.0, isUpperLimit: true}},
+		},
+		{
+			name:    "line with less than 3 fields",
+			input:   "cpu_usage, 80",
+			wantErr: true,
+		},
+		{
+			name:    "line with more than 3 fields",
+			input:   "cpu_usage, 80, max, extra",
+			wantErr: true,
+		},
+		{
+			name:    "non numeric second field",
+			input:   "cpu_usage, eighty, max",
+			wantErr: true,
+		},
+		{
+			name:    "third field not max or min",
+			input:   "cpu_usage, 80, upper",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range rts {
+		t.Run(tt.name, func(t *testing.T) {
+			r := strings.NewReader(tt.input)
+			thres, err := readThresholds(r, ",")
+
+			if tt.wantErr && err == nil {
+				t.Fatalf("readThresholds (%q) - error not present when expected", tt.name)
+			}
+
+			if len(thres) == len(tt.want) {
+				for k, v := range tt.want {
+					if thres[k] != v {
+						t.Errorf("readThresholds (%q) - expected %s = %v - got %s = %v", tt.name, k, v, k, thres[k])
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestReadMetrics(t *testing.T) {
+	rms := []struct {
+		name  string
+		input string
+		want  []Metric
+		// wantErr bool
+	}{
+		{
+			name:  "correct single line",
+			input: "cpu_usage,75.2,%,2025-05-15T10:00:00Z",
+			want: []Metric{
+				{
+					Name:      "cpu_usage",
+					Value:     75.2,
+					Unit:      "%",
+					Timestamp: time.Date(2025, 5, 15, 10, 0, 0, 0, time.UTC),
+				},
+			},
+		},
+		{
+			name:  "correct multiple lines",
+			input: "cpu_usage,75.2,%,2025-05-15T10:00:00Z\ndisk_free,15.3,GB,2025-05-15T10:00:00Z",
+			want: []Metric{
+				{
+					Name:      "cpu_usage",
+					Value:     75.2,
+					Unit:      "%",
+					Timestamp: time.Date(2025, 5, 15, 10, 0, 0, 0, time.UTC),
+				},
+				{
+					Name:      "disk_free",
+					Value:     15.3,
+					Unit:      "GB",
+					Timestamp: time.Date(2025, 5, 15, 10, 0, 0, 0, time.UTC),
+				},
+			},
+		},
+		{
+			name:  "spaced line",
+			input: " cpu_usage, 75.2, %, 2025-05-15T10:00:00Z ",
+			want: []Metric{
+				{
+					Name:      "cpu_usage",
+					Value:     75.2,
+					Unit:      "%",
+					Timestamp: time.Date(2025, 5, 15, 10, 0, 0, 0, time.UTC),
+				},
+			},
+		},
+		{
+			name:  "empty line",
+			input: "",
+			want:  []Metric{},
+		},
+		{
+			name:  "commented line",
+			input: "# This is a comment",
+			want:  []Metric{},
+		},
+		{
+			name:  "comented line and valid line",
+			input: "# This is a comment\ncpu_usage,75.2,%,2025-05-15T10:00:00Z",
+			want: []Metric{
+				{
+					Name:      "cpu_usage",
+					Value:     75.2,
+					Unit:      "%",
+					Timestamp: time.Date(2025, 5, 15, 10, 0, 0, 0, time.UTC),
+				},
+			},
+		},
+		{
+			name:  "uppercase line",
+			input: "CPU_USAGE,75.2,%,2025-05-15T10:00:00Z",
+			want: []Metric{
+				{
+					Name:      "cpu_usage",
+					Value:     75.2,
+					Unit:      "%",
+					Timestamp: time.Date(2025, 5, 15, 10, 0, 0, 0, time.UTC),
+				},
+			},
+		},
+		{
+			name:  "line with less than 4 fields. Should show warning",
+			input: "CPU_USAGE,75.2,%",
+			want:  []Metric{},
+		},
+		{
+			name:  "line with more than 4 fields. Should show warning",
+			input: "CPU_USAGE,75.2,%,2025-05-15T10:00:00Z,extra",
+			want:  []Metric{},
+		},
+		{
+			name:  "non-numeric second field. Should show warning",
+			input: "cpu_usage,seventy five,%,2025-05-15T10:00:00Z",
+			want:  []Metric{},
+		},
 	}
 }
