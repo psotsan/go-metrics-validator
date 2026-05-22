@@ -192,11 +192,13 @@ func TestReadThresholds(t *testing.T) {
 				t.Fatalf("readThresholds (%q) - error not present when expected", tt.name)
 			}
 
-			if len(thres) == len(tt.want) {
-				for k, v := range tt.want {
-					if thres[k] != v {
-						t.Errorf("readThresholds (%q) - expected %s = %v - got %s = %v", tt.name, k, v, k, thres[k])
-					}
+			if len(thres) != len(tt.want) {
+				t.Fatalf("readThresholds (%q) - got and want lengths differ", tt.name)
+			}
+
+			for k, v := range tt.want {
+				if thres[k] != v {
+					t.Errorf("readThresholds (%q) - expected %s = %v - got %s = %v", tt.name, k, v, k, thres[k])
 				}
 			}
 		})
@@ -301,5 +303,274 @@ func TestReadMetrics(t *testing.T) {
 			input: "cpu_usage,seventy five,%,2025-05-15T10:00:00Z",
 			want:  []Metric{},
 		},
+		{
+			name:  "Incorrect date. Should show warning",
+			input: "cpu_usage,75.2,%,2025-15-05T10:00:00Z",
+			want:  []Metric{},
+		},
+		{
+			name:  "valid line after invalid line",
+			input: "mem_usage,80,%,no date\ncpu_usage,75.2,%,2025-05-15T10:00:00Z",
+			want: []Metric{
+				{
+					Name:      "cpu_usage",
+					Value:     75.2,
+					Unit:      "%",
+					Timestamp: time.Date(2025, 5, 15, 10, 0, 0, 0, time.UTC),
+				},
+			},
+		},
+	}
+
+	for _, tt := range rms {
+		t.Run(tt.name, func(t *testing.T) {
+			r := strings.NewReader(tt.input)
+			got, _ := readMetrics(r, ",")
+
+			if len(got) != len(tt.want) {
+				t.Fatalf("evaluateMetrics (%q) - want and got slices have different length", tt.name)
+			}
+
+			for i, m := range got {
+				if m != tt.want[i] {
+					t.Errorf("readMetrics (%q) - expected = %v - got = %v", tt.name, tt.want[i], m)
+				}
+			}
+		})
+	}
+}
+
+func TestEvaluateMetrics(t *testing.T) {
+	ems := []struct {
+		name    string
+		metrics []Metric
+		want    []Metric
+		thres   map[string]Threshold
+	}{
+		{
+			name: "1 metric max limit surpassed",
+			metrics: []Metric{
+				{
+					Name:      "cpu_usage",
+					Value:     90.0,
+					Unit:      "%",
+					Timestamp: time.Date(2025, 5, 15, 10, 0, 0, 0, time.UTC),
+				},
+			},
+			want: []Metric{
+				{
+					Name:      "cpu_usage",
+					Value:     90.0,
+					Unit:      "%",
+					Timestamp: time.Date(2025, 5, 15, 10, 0, 0, 0, time.UTC),
+				},
+			},
+			thres: map[string]Threshold{
+				"cpu_usage": {
+					value:        80.0,
+					isUpperLimit: true,
+				},
+			},
+		},
+		{
+			name: "1 metric min limit surpassed",
+			metrics: []Metric{
+				{
+					Name:      "disk_free",
+					Value:     5.0,
+					Unit:      "GB",
+					Timestamp: time.Date(2025, 5, 15, 10, 0, 0, 0, time.UTC),
+				},
+			},
+			want: []Metric{
+				{
+					Name:      "disk_free",
+					Value:     5.0,
+					Unit:      "GB",
+					Timestamp: time.Date(2025, 5, 15, 10, 0, 0, 0, time.UTC),
+				},
+			},
+			thres: map[string]Threshold{
+				"disk_free": {
+					value:        20.0,
+					isUpperLimit: false,
+				},
+			},
+		},
+		{
+			name: "1 metric max limit not surpassed",
+			metrics: []Metric{
+				{
+					Name:      "cpu_usage",
+					Value:     10.0,
+					Unit:      "%",
+					Timestamp: time.Date(2025, 5, 15, 10, 0, 0, 0, time.UTC),
+				},
+			},
+			want: []Metric{},
+			thres: map[string]Threshold{
+				"cpu_usage": {
+					value:        80.0,
+					isUpperLimit: true,
+				},
+			},
+		},
+		{
+			name: "1 metric min limit not surpassed",
+			metrics: []Metric{
+				{
+					Name:      "disk_free",
+					Value:     70.0,
+					Unit:      "GB",
+					Timestamp: time.Date(2025, 5, 15, 10, 0, 0, 0, time.UTC),
+				},
+			},
+			want: []Metric{},
+			thres: map[string]Threshold{
+				"disk_free": {
+					value:        20.0,
+					isUpperLimit: false,
+				},
+			},
+		},
+		{
+			name: "1 metric max limit exactly equal",
+			metrics: []Metric{
+				{
+					Name:      "cpu_usage",
+					Value:     80.0,
+					Unit:      "%",
+					Timestamp: time.Date(2025, 5, 15, 10, 0, 0, 0, time.UTC),
+				},
+			},
+			want: []Metric{},
+			thres: map[string]Threshold{
+				"cpu_usage": {
+					value:        80.0,
+					isUpperLimit: true,
+				},
+			},
+		},
+		{
+			name: "1 metric min limit exactly equal",
+			metrics: []Metric{
+				{
+					Name:      "disk_free",
+					Value:     20.0,
+					Unit:      "GB",
+					Timestamp: time.Date(2025, 5, 15, 10, 0, 0, 0, time.UTC),
+				},
+			},
+			want: []Metric{},
+			thres: map[string]Threshold{
+				"disk_free": {
+					value:        20.0,
+					isUpperLimit: false,
+				},
+			},
+		},
+		{
+			name: "metric non existent in map",
+			metrics: []Metric{
+				{
+					Name:      "some_metric",
+					Value:     20.0,
+					Unit:      "GB",
+					Timestamp: time.Date(2025, 5, 15, 10, 0, 0, 0, time.UTC),
+				},
+			},
+			want: []Metric{},
+			thres: map[string]Threshold{
+				"disk_free": {
+					value:        20.0,
+					isUpperLimit: false,
+				},
+			},
+		},
+		{
+			name: "3 metrics. One exceeds threshold",
+			metrics: []Metric{
+				{
+					Name:      "disk_free",
+					Value:     20.0,
+					Unit:      "GB",
+					Timestamp: time.Date(2025, 5, 15, 10, 0, 0, 0, time.UTC),
+				},
+				{
+					Name:      "cpu_usage",
+					Value:     90.0,
+					Unit:      "%",
+					Timestamp: time.Date(2025, 5, 15, 10, 0, 0, 0, time.UTC),
+				},
+				{
+					Name:      "mem_usage",
+					Value:     28.0,
+					Unit:      "%",
+					Timestamp: time.Date(2025, 5, 15, 10, 0, 0, 0, time.UTC),
+				},
+			},
+			want: []Metric{
+				{
+					Name:      "cpu_usage",
+					Value:     90.0,
+					Unit:      "%",
+					Timestamp: time.Date(2025, 5, 15, 10, 0, 0, 0, time.UTC),
+				},
+			},
+			thres: map[string]Threshold{
+				"disk_free": {
+					value:        20.0,
+					isUpperLimit: false,
+				},
+				"cpu_usage": {
+					value:        80.0,
+					isUpperLimit: true,
+				},
+				"mem_usage": {
+					value:        75.0,
+					isUpperLimit: true,
+				},
+			},
+		},
+		{
+			name:    "empty metrics slice",
+			metrics: []Metric{},
+			want:    []Metric{},
+			thres: map[string]Threshold{
+				"disk_free": {
+					value:        20.0,
+					isUpperLimit: false,
+				},
+			},
+		},
+		{
+			name: "empty threshold map",
+			metrics: []Metric{
+				{
+					Name:      "cpu_usage",
+					Value:     90.0,
+					Unit:      "%",
+					Timestamp: time.Date(2025, 5, 15, 10, 0, 0, 0, time.UTC),
+				},
+			},
+			want:  []Metric{},
+			thres: map[string]Threshold{},
+		},
+	}
+
+	for _, tt := range ems {
+		t.Run(tt.name, func(t *testing.T) {
+			got := evaluateMetrics(tt.metrics, tt.thres)
+
+			if len(got) != len(tt.want) {
+				t.Fatalf("evaluateMetrics (%q) - want and got slices have different length", tt.name)
+			}
+
+			for i, m := range got {
+				if m != tt.want[i] {
+					t.Errorf("evaluateMetrics (%q)- expected = %v - got %v", tt.name, tt.want[i], m)
+				}
+			}
+		})
 	}
 }

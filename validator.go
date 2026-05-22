@@ -129,7 +129,12 @@ func evaluateMetrics(metrics []Metric, thresholds map[string]Threshold) (warnMet
 	warnMetrics = make([]Metric, 0)
 
 	for _, m := range metrics {
-		t := thresholds[m.Name]
+		var t Threshold
+		var ok bool
+
+		if t, ok = thresholds[m.Name]; !ok {
+			continue
+		}
 
 		if t.isUpperLimit && m.Value > t.value {
 			warnMetrics = append(warnMetrics, m)

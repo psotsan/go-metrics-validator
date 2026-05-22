@@ -27,6 +27,7 @@ func main() {
 	thresholds, err := readThresholds(r, separator)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[-] %v\n", err)
+		os.Exit(1)
 	}
 
 	r, err = os.Open(mFileName)
