@@ -5,9 +5,9 @@ import (
 	"os"
 )
 
-func main() {
-	const separator = ","
+const separator = ","
 
+func main() {
 	if len(os.Args) != 3 {
 		fmt.Fprintln(os.Stderr, "[-] Must provide exactly 2 argument: [metrics] [thresholds]")
 		os.Exit(1)
@@ -24,7 +24,7 @@ func main() {
 	}
 	defer r.Close()
 
-	thresholds, err := readThresholds(r, separator)
+	thresholds, err := readThresholds(r)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[-] %v\n", err)
 		os.Exit(1)
@@ -37,7 +37,7 @@ func main() {
 	}
 	defer r.Close()
 
-	metrics, err := readMetrics(r, separator)
+	metrics, err := readMetrics(r)
 	metrics = evaluateMetrics(metrics, thresholds)
 
 	for _, m := range metrics {

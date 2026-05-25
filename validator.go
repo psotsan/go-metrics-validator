@@ -22,9 +22,9 @@ type Threshold struct {
 	isUpperLimit bool
 }
 
-func splitAndValidate(l string, n int, s string) ([]string, bool) {
+func splitAndValidate(l string, n int) ([]string, bool) {
 	var ret []string
-	f := strings.Split(l, s)
+	f := strings.Split(l, separator)
 	for _, st := range f {
 		st = strings.Trim(st, " ")
 		if st != "" {
@@ -34,7 +34,7 @@ func splitAndValidate(l string, n int, s string) ([]string, bool) {
 	return ret, len(ret) == n
 }
 
-func readThresholds(r io.Reader, sep string) (thresholds map[string]Threshold, err error) {
+func readThresholds(r io.Reader) (thresholds map[string]Threshold, err error) {
 	thresholds = make(map[string]Threshold)
 
 	sc := bufio.NewScanner(r)
@@ -47,7 +47,7 @@ func readThresholds(r io.Reader, sep string) (thresholds map[string]Threshold, e
 			continue
 		}
 
-		fields, ok := splitAndValidate(line, 3, sep)
+		fields, ok := splitAndValidate(line, 3)
 		if !ok {
 			return nil, fmt.Errorf("Thresholds file: format fault at line %d", l)
 		}
@@ -78,7 +78,7 @@ func readThresholds(r io.Reader, sep string) (thresholds map[string]Threshold, e
 	return
 }
 
-func readMetrics(r io.Reader, sep string) ([]Metric, error) {
+func readMetrics(r io.Reader) ([]Metric, error) {
 	var metrics []Metric
 
 	sc := bufio.NewScanner(r)
@@ -91,7 +91,7 @@ func readMetrics(r io.Reader, sep string) ([]Metric, error) {
 			continue
 		}
 
-		fields, ok := splitAndValidate(line, 4, sep)
+		fields, ok := splitAndValidate(line, 4)
 		if !ok {
 			e := fmt.Sprintf("Metrics file: format fault at line %d", l)
 			fmt.Fprintln(os.Stderr, e)

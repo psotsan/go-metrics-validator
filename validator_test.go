@@ -11,7 +11,6 @@ func TestSplitAndValidate(t *testing.T) {
 		name     string
 		line     string
 		n        int
-		sep      string
 		wantStr  []string
 		wantBool bool
 	}{
@@ -19,7 +18,6 @@ func TestSplitAndValidate(t *testing.T) {
 			name:     "two fields OK",
 			line:     "cpu_usage,65",
 			n:        2,
-			sep:      ",",
 			wantStr:  []string{"cpu_usage", "65"},
 			wantBool: true,
 		},
@@ -27,7 +25,6 @@ func TestSplitAndValidate(t *testing.T) {
 			name:     "four fields OK",
 			line:     "mem_usage,82.0,%,2025-05-15T10:00:00Z",
 			n:        4,
-			sep:      ",",
 			wantStr:  []string{"mem_usage", "82.0", "%", "2025-05-15T10:00:00Z"},
 			wantBool: true,
 		},
@@ -35,7 +32,6 @@ func TestSplitAndValidate(t *testing.T) {
 			name:     "two fields no separator",
 			line:     "cpu_usage 65",
 			n:        2,
-			sep:      ",",
 			wantStr:  []string{"cpu_usage 65"},
 			wantBool: false,
 		},
@@ -43,7 +39,6 @@ func TestSplitAndValidate(t *testing.T) {
 			name:     "more fields than expected",
 			line:     "mem_usage,82.0,%,2025-05-15T10:00:00Z",
 			n:        2,
-			sep:      ",",
 			wantStr:  []string{"mem_usage", "82.0", "%", "2025-05-15T10:00:00Z"},
 			wantBool: false,
 		},
@@ -51,7 +46,6 @@ func TestSplitAndValidate(t *testing.T) {
 			name:     "less fields than expected",
 			line:     "mem_usage,82.0,",
 			n:        4,
-			sep:      ",",
 			wantStr:  []string{"mem_usage", "82.0"},
 			wantBool: false,
 		},
@@ -59,7 +53,6 @@ func TestSplitAndValidate(t *testing.T) {
 			name:     "empty line",
 			line:     "",
 			n:        2,
-			sep:      ",",
 			wantStr:  []string{},
 			wantBool: false,
 		},
@@ -67,7 +60,6 @@ func TestSplitAndValidate(t *testing.T) {
 			name:     "leading separator",
 			line:     ",cpu_usage",
 			n:        2,
-			sep:      ",",
 			wantStr:  []string{"cpu_usage"},
 			wantBool: false,
 		},
@@ -75,7 +67,6 @@ func TestSplitAndValidate(t *testing.T) {
 			name:     "trailing separator",
 			line:     "cpu_usage,",
 			n:        2,
-			sep:      ",",
 			wantStr:  []string{"cpu_usage"},
 			wantBool: false,
 		},
@@ -83,7 +74,6 @@ func TestSplitAndValidate(t *testing.T) {
 			name:     "untrimmed values",
 			line:     "    cpu_usage  ,  92 ",
 			n:        2,
-			sep:      ",",
 			wantStr:  []string{"cpu_usage", "92"},
 			wantBool: true,
 		},
@@ -91,7 +81,7 @@ func TestSplitAndValidate(t *testing.T) {
 
 	for _, tt := range savs {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := splitAndValidate(tt.line, tt.n, tt.sep)
+			got, ok := splitAndValidate(tt.line, tt.n)
 			sameStr := true
 			if ok == tt.wantBool && len(got) == len(tt.wantStr) {
 				for i := range got {
@@ -186,7 +176,7 @@ func TestReadThresholds(t *testing.T) {
 	for _, tt := range rts {
 		t.Run(tt.name, func(t *testing.T) {
 			r := strings.NewReader(tt.input)
-			thres, err := readThresholds(r, ",")
+			thres, err := readThresholds(r)
 
 			if tt.wantErr && err == nil {
 				t.Fatalf("readThresholds (%q) - error not present when expected", tt.name)
@@ -325,7 +315,7 @@ func TestReadMetrics(t *testing.T) {
 	for _, tt := range rms {
 		t.Run(tt.name, func(t *testing.T) {
 			r := strings.NewReader(tt.input)
-			got, _ := readMetrics(r, ",")
+			got, _ := readMetrics(r)
 
 			if len(got) != len(tt.want) {
 				t.Fatalf("evaluateMetrics (%q) - want and got slices have different length", tt.name)
