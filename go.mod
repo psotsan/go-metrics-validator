@@ -1,3 +1,3 @@
 module github.com/psotsan/go-metrics-validator
 
-go 1.25.11
+go 1.25.10
