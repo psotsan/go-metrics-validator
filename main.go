@@ -18,11 +18,15 @@ func main() {
 
 	r, err := os.Open(tFileName)
 	if err != nil {
-		e := fmt.Errorf("Could not open file %s", tFileName)
+		e := fmt.Errorf("could not open file %s", tFileName)
 		fmt.Fprintln(os.Stderr, e)
 		os.Exit(1)
 	}
-	defer r.Close()
+	defer func() {
+		if err := r.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: error closing thresholds file: %v\n", err)
+		}
+	}()
 
 	thresholds, err := readThresholds(r)
 	if err != nil {
@@ -35,7 +39,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "[-] %s metrics file could not be opened or does not exist\n", os.Args[1])
 		os.Exit(1)
 	}
-	defer r.Close()
+	defer func() {
+		if err := r.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: error closing thresholds file: %v\n", err)
+		}
+	}()
 
 	metrics, err := readMetrics(r)
 	metrics = evaluateMetrics(metrics, thresholds)

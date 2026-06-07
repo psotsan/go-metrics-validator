@@ -49,17 +49,17 @@ func readThresholds(r io.Reader) (thresholds map[string]Threshold, err error) {
 
 		fields, ok := splitAndValidate(line, 3)
 		if !ok {
-			return nil, fmt.Errorf("Thresholds file: format fault at line %d", l)
+			return nil, fmt.Errorf("thresholds file: format fault at line %d", l)
 		}
 
 		val, e := strconv.ParseFloat(fields[1], 64)
 		if e != nil {
-			return nil, fmt.Errorf("Thresholds file: could not convert %s to float64 at line %d", fields[1], l)
+			return nil, fmt.Errorf("thresholds file: could not convert %s to float64 at line %d", fields[1], l)
 		}
 
 		limitType := strings.ToLower(fields[2])
 		if limitType != "max" && limitType != "min" {
-			return nil, fmt.Errorf("Thresholds file: unrecognized type of limit at line %d", l)
+			return nil, fmt.Errorf("thresholds file: unrecognized type of limit at line %d", l)
 		}
 
 		key := strings.ToLower(fields[0])
