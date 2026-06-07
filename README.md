@@ -1,4 +1,5 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/psotsan/go-metrics-validator)](https://goreportcard.com/report/github.com/psotsan/go-metrics-validator)
+[![Go CI](https://github.com/psotsan/go-metrics-validator/actions/workflows/ci.yml/badge.svg)](https://github.com/psotsan/go-metrics-validator/actions/workflows/ci.yml)
 # Metrics Validator
 
 Go CLI tool to validate metrics against thresholds.  
